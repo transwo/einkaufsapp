@@ -54,7 +54,7 @@ ORDNER = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, ORDNER)
 from gruppen import gruppe_von, ALLE_GRUPPEN  # noqa: E402
 
-VERSION = "9"
+VERSION = "10"
 PLZ = "01279"
 ORT = "Dresden"
 BERICHT = []
@@ -715,6 +715,15 @@ PROSPEKT_KANDIDATEN = {
 }
 
 
+# Seit Fassung 10: Maerkte, deren Seite die Pruefung von GitHub aus sperrt
+# (rewe.de antwortet dort mit HTTP 403, am PC mit 200 - gemessen 17.09.2026).
+# Antwortet keine Adresse, wird diese fest eingetragen. Nur fuer Adressen,
+# die am PC schon einmal geantwortet haben.
+FESTER_PROSPEKT = {
+    "REWE": "https://www.rewe.de/angebote/",
+}
+
+
 def prospekte(maerkte):
     sag("--- Prospekte ---")
     h = {
@@ -734,6 +743,9 @@ def prospekte(maerkte):
                 sag("  %-10s HTTP %s  %s" % (m, r.status_code, u))
             except Exception as e:
                 sag("  %-10s Fehler %s  %s" % (m, str(e)[:60], u))
+        if m not in ergebnis and m in FESTER_PROSPEKT:
+            ergebnis[m] = FESTER_PROSPEKT[m]
+            sag("  %-10s fest eingetragen (Pruefung gesperrt)  %s" % (m, FESTER_PROSPEKT[m]))
         if m not in ergebnis:
             sag("  %-10s keine Adresse gefunden" % m)
     return ergebnis
