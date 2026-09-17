@@ -43,6 +43,34 @@ jobs:
         with:
           path: _site
 
+  lebenszeichen:
+    # GitHub schaltet zeitgesteuerte Laeufe in oeffentlichen Repositorys
+    # ab, wenn 60 Tage lang nichts ins Repository geschrieben wurde.
+    # Ist der letzte Eintrag 50 Tage oder aelter, schreibt dieser Schritt
+    # das Datum in lebenszeichen.txt. Sonst tut er nichts.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Dateien holen
+        uses: actions/checkout@v6
+      - name: Lebenszeichen schreiben, falls noetig
+        run: |
+          letzter=$(git log -1 --format=%ct)
+          jetzt=$(date +%s)
+          tage=$(( (jetzt - letzter) / 86400 ))
+          echo "Letzter Eintrag vor $tage Tagen"
+          if [ "$tage" -ge 50 ]; then
+            TZ=Europe/Berlin date +"%d.%m.%Y" > lebenszeichen.txt
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add lebenszeichen.txt
+            git commit -m "Lebenszeichen, damit GitHub den naechtlichen Lauf nicht abschaltet"
+            git push
+          else
+            echo "Nichts zu tun"
+          fi
+
   veroeffentlichen:
     needs: holen
     runs-on: ubuntu-latest
