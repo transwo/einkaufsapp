@@ -54,7 +54,7 @@ ORDNER = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, ORDNER)
 from gruppen import gruppe_von, ALLE_GRUPPEN  # noqa: E402
 
-VERSION = "10"
+VERSION = "11"
 PLZ = "01279"
 ORT = "Dresden"
 BERICHT = []
@@ -389,6 +389,7 @@ def marktguru():
 REWE_MARKT = "4031024"
 REWE_SEITE = "https://www.rewe.de/angebote/dresden/4031024/rewe-center-enderstr-59/"
 REWE_DIREKT = [False]
+REWE_PROSPEKT = [""]  # seit Fassung 11: Blaetterprospekt des Marktes, von rewe() gelesen
 
 
 def _rewe_woche():
@@ -422,6 +423,15 @@ def rewe():
     if r.status_code != 200:
         return
     soup = BeautifulSoup(r.text, "html.parser")
+    # Seit Fassung 11: Der Knopf "Angebote als Prospekt" der Marktseite oeffnet
+    # den Blaetterprospekt dieses Marktes (publitas, mit Woche und Marktnummer).
+    pb = soup.select_one("[data-testid='sos-handbill-frame'][data-src], iframe[data-src*='publitas']") \
+        or soup.find(attrs={"data-src": re.compile("publitas")})
+    if pb and pb.get("data-src", "").startswith("https://"):
+        REWE_PROSPEKT[0] = pb.get("data-src")
+        sag("Prospekt des Marktes: %s" % REWE_PROSPEKT[0])
+    else:
+        sag("Prospekt des Marktes: nicht auf der Seite gefunden")
     woche = "next" if naechste else "current"
     wurzel = soup.select_one("#sos-categories-%s, .sos-categories-%s, [data-categories-week-value='%s']"
                              % (woche, woche, woche)) or soup
@@ -726,6 +736,9 @@ FESTER_PROSPEKT = {
 
 def prospekte(maerkte):
     sag("--- Prospekte ---")
+    vorab = {}
+    if REWE_PROSPEKT[0]:
+        vorab["REWE"] = REWE_PROSPEKT[0]
     h = {
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "de-DE,de;q=0.9",
@@ -733,6 +746,10 @@ def prospekte(maerkte):
     }
     ergebnis = {}
     for m in maerkte:
+        if m in vorab:
+            ergebnis[m] = vorab[m]
+            sag("  %-10s %s  (Prospekt des Marktes)" % (m, vorab[m]))
+            continue
         for u in PROSPEKT_KANDIDATEN.get(m, []):
             try:
                 r = hole(u, h, timeout=30)
