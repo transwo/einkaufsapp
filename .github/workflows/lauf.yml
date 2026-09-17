@@ -1,0 +1,58 @@
+# Einkaufsapp - holt jede Nacht die Angebote und legt die Seite auf
+# GitHub Pages (https://transwo.github.io/einkaufsapp/).
+# Die Zeit steht in UTC: 3 Uhr UTC = 5 Uhr in Dresden (Sommerzeit).
+name: Angebote holen
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  holen:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dateien holen
+        uses: actions/checkout@v6
+      - name: Python einrichten
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: curl_cffi installieren
+        run: python -m pip install --quiet curl_cffi
+      - name: Angebote holen
+        env:
+          TZ: Europe/Berlin
+          MARKTGURU_APIKEY: ${{ secrets.MARKTGURU_APIKEY }}
+          MARKTGURU_CLIENTKEY: ${{ secrets.MARKTGURU_CLIENTKEY }}
+        run: python hole.py
+      - name: Seite zusammenstellen
+        run: |
+          mkdir -p _site
+          cp index.html bericht.txt angebote.json _site/ || true
+          test -f _site/index.html || echo "<p>Lauf ohne Seite - siehe bericht.txt</p>" > _site/index.html
+      - name: Seite hochladen
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: _site
+
+  veroeffentlichen:
+    needs: holen
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.seite.outputs.page_url }}
+    steps:
+      - name: Auf GitHub Pages legen
+        id: seite
+        uses: actions/deploy-pages@v4
