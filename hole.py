@@ -5,19 +5,56 @@ Schreibt ausschliesslich in den eigenen Ordner:
   angebote.json  - die gesammelten Angebote
   index.html     - die fertige Seite fuer das iPad
   bericht.txt    - was beim Lauf passiert ist
+
+REWE je Filiale (seit Fassung 9): Der Abrufweg (Angebotsseite des Marktes,
+fehlende Angebotskacheln ueber /api/frontend-includes) stammt aus dem Projekt
+KorbKlar von lesecuritae fuer Tarnkappe.info,
+https://github.com/lesecuritae/KorbKlar (src/supermarkt/sources/rewe.py),
+und wurde in der Funktion rewe() nachgebaut. Lizenz des Originals:
+
+BSD 3-Clause License
+
+Copyright (c) 2026 lesecuritae fuer Tarnkappe.info
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without modification,
+are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this
+   list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright notice,
+   this list of conditions and the following disclaimer in the documentation
+   and/or other materials provided with the distribution.
+
+3. Neither the name of the copyright holder nor the names of its contributors
+   may be used to endorse or promote products derived from this software
+   without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 """
 import io
 import json
 import os
 import re
 import sys
-from datetime import datetime, timezone
+import uuid
+from datetime import datetime, timedelta, timezone
 
 ORDNER = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, ORDNER)
 from gruppen import gruppe_von, ALLE_GRUPPEN  # noqa: E402
 
-VERSION = "8"
+VERSION = "9"
 PLZ = "01279"
 ORT = "Dresden"
 BERICHT = []
@@ -317,9 +354,13 @@ def marktguru():
         sag("ueber Stichwoerter geholt: %d" % len(treffer))
 
     n = 0
+    rewe_weg = 0
     for o in treffer:
         adv = (o.get("advertisers") or [{}])[0]
         markt = adv.get("name") or "?"
+        if REWE_DIREKT[0] and markt.lower().startswith("rewe"):
+            rewe_weg += 1   # REWE kommt schon direkt vom Markt, siehe rewe()
+            continue
         prod = (o.get("product") or {}).get("name") or ""
         marke = (o.get("brand") or {}).get("name") or ""
         if marke.startswith("thisisnobrand"):
@@ -330,7 +371,121 @@ def marktguru():
         merke(markt, name, o.get("description"), o.get("price"), o.get("oldPrice"),
               ("%s" % rp) if rp else "", gv.get("from"), gv.get("to"))
         n += 1
+    if REWE_DIREKT[0]:
+        sag("REWE-Eintraege weggelassen (kommen direkt vom Markt): %d" % rewe_weg)
+    else:
+        sag("REWE kommt ueber Marktguru (direkter Abruf lieferte nichts)")
     sag("uebernommen: %d" % n)
+
+
+# ------------------------------------------------------------------ REWE
+# Dietrichs Markt: REWE Center, Enderstr. 59, 01277 Dresden (Marktnummer
+# 4031024, gemessen mit rewe_pruefen.py am 17.09.2026). Die Angebotsseite
+# enthaelt alle Angebote als Eintraege mit data-offer-nan, aber nur wenige
+# fertige Kacheln; der Rest wird je 25 ueber /api/frontend-includes geholt.
+# Weg nach KorbKlar (lesecuritae, BSD-3, siehe Kopf dieser Datei).
+# Liefert der Abruf nichts, bleibt REWE_DIREKT falsch und REWE kommt wie
+# bisher ueber Marktguru.
+REWE_MARKT = "4031024"
+REWE_SEITE = "https://www.rewe.de/angebote/dresden/4031024/rewe-center-enderstr-59/"
+REWE_DIREKT = [False]
+
+
+def _rewe_woche():
+    """Montag und Sonntag der Angebotswoche; sonntags gilt schon die naechste
+    (wie bei KorbKlar)."""
+    heute = datetime.now().date()
+    naechste = heute.weekday() == 6
+    montag = heute - timedelta(days=heute.weekday())
+    if naechste:
+        montag = montag + timedelta(days=7)
+    return naechste, montag, montag + timedelta(days=6)
+
+
+def _rewe_titel(knoten):
+    if knoten is None:
+        return ""
+    for sup in knoten.find_all("sup"):
+        sup.decompose()
+    return re.sub(r"\s+", " ", knoten.get_text(" ", strip=True).replace("\xad", "")).strip()
+
+
+def rewe():
+    sag("--- REWE ---")
+    from bs4 import BeautifulSoup
+    naechste, von, bis = _rewe_woche()
+    url = REWE_SEITE + ("?week=next" if naechste else "")
+    s = cr.Session(impersonate="chrome")
+    h = {"Accept": "text/html,application/xhtml+xml,*/*;q=0.8", "Accept-Language": "de-DE,de;q=0.9"}
+    r = s.get(url, headers=h, timeout=60)
+    sag("Markt %s, %s -> HTTP %s" % (REWE_MARKT, "naechste Woche" if naechste else "diese Woche", r.status_code))
+    if r.status_code != 200:
+        return
+    soup = BeautifulSoup(r.text, "html.parser")
+    woche = "next" if naechste else "current"
+    wurzel = soup.select_one("#sos-categories-%s, .sos-categories-%s, [data-categories-week-value='%s']"
+                             % (woche, woche, woche)) or soup
+    eintraege = {}
+    for hl in wurzel.select("[data-offer-nan]"):
+        nan = hl.get("data-offer-nan")
+        if not nan or nan in eintraege:
+            continue
+        eintraege[nan] = {"ww": hl.get("data-offer-wwident") or REWE_MARKT,
+                          "kachel": hl.select_one(".cor-offer-renderer-tile")}
+    fehlend = [n for n, v in eintraege.items() if v["kachel"] is None]
+    sag("Angebote auf der Seite: %d, nachzuladen: %d" % (len(eintraege), len(fehlend)))
+    kopf = {"Accept": "application/json", "Content-Type": "application/json",
+            "Rd-Client-Href": url, "Origin": "https://www.rewe.de", "Referer": url}
+    fehler = 0
+    for start in range(0, len(fehlend), 25):
+        stueck = fehlend[start:start + 25]
+        ids, last = {}, []
+        for n in stueck:
+            rid = str(uuid.uuid4())
+            ids[rid] = n
+            last.append({"id": rid, "namespace": "cor", "name": "offer-tile-by-nan",
+                         "params": {"nan": n},
+                         "query": {"wwIdent": eintraege[n]["ww"], "showDuration": "auto",
+                                   "showFootnotes": "", "enableDetailDeeplink": "true",
+                                   "enablePerformanceMark": "", "heroStyles": "false"}})
+        try:
+            r2 = s.post("https://www.rewe.de/api/frontend-includes", headers=kopf, json=last, timeout=60)
+            if r2.status_code != 200:
+                fehler += 1
+                continue
+            for item in r2.json():
+                n = ids.get(item.get("id"))
+                c = item.get("content")
+                if n and isinstance(c, str) and c.strip():
+                    cs = BeautifulSoup(c, "html.parser")
+                    eintraege[n]["kachel"] = cs.select_one(".cor-offer-renderer-tile") or cs
+        except Exception:
+            fehler += 1
+    if fehler:
+        sag("Nachladen fehlgeschlagen in %d von %d Abrufen" % (fehler, (len(fehlend) + 24) // 25))
+    k = 0
+    ohne_preis = 0
+    for n, v in eintraege.items():
+        kachel = v["kachel"]
+        if kachel is None:
+            continue
+        name = _rewe_titel(kachel.select_one(".cor-offer-information__title"))
+        pk = kachel.select_one(".cor-offer-price__tag-price")
+        pm = re.search(r"(\d{1,4}(?:[.,]\d{1,2})?)\s*€", pk.get_text(" ", strip=True)) if pk else None
+        if not name or not pm:
+            ohne_preis += 1
+            continue
+        teile = [re.sub(r"\s+", " ", x.get_text(" ", strip=True))
+                 for x in kachel.select(".cor-offer-information__additional")]
+        zusatz = " ".join(x for x in teile if x).replace("\xad", "")
+        zusatz = re.sub(r"\s+,", ",", zusatz).strip(" ,")
+        gm = re.search(r"\((1\s*(?:kg|l|Liter|Stück|Stk\.?|WL|m)\s*=\s*[\d.,]+\s*€)\)", zusatz)
+        grund = gm.group(1) if gm else ""
+        merke("REWE", name, zusatz, zahl(pm.group(1)), None, grund, von.isoformat(), bis.isoformat())
+        k += 1
+    sag("uebernommen: %d, ohne Name oder Preis: %d" % (k, ohne_preis))
+    if k > 0:
+        REWE_DIREKT[0] = True
 
 
 # -------------------------------------------------------------- KAUFLAND
@@ -590,7 +745,8 @@ def main():
     sag("")
     if cr is None:
         return
-    for fn in (lidl, edeka, marktguru, kaufland, aldi):
+    # rewe() vor marktguru(): Marktguru laesst REWE weg, wenn rewe() geliefert hat.
+    for fn in (lidl, edeka, rewe, marktguru, kaufland, aldi):
         try:
             fn()
         except Exception as e:
