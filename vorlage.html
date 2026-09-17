@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Angebote">
+<title>Angebote</title>
+<style>
+:root{
+  --bg:#f6f6f4; --karte:#ffffff; --text:#1b1b1a; --grau:#6b6b66;
+  --linie:#e2e2dd; --akzent:#1f6f3f; --warn:#8a5a00; --feld:#ffffff;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#16171a; --karte:#202227; --text:#ecedee; --grau:#9b9ea3;
+         --linie:#2e3138; --akzent:#5fbe86; --warn:#d7a53c; --feld:#25282e; }
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--bg); color:var(--text);
+  font:17px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  padding:0 16px 64px; max-width:1100px; margin:0 auto;
+  -webkit-text-size-adjust:100%;
+}
+header{position:sticky; top:0; background:var(--bg); padding:14px 0 10px; z-index:10}
+h1{font-size:26px; margin:0 0 2px; letter-spacing:-.01em}
+.stand{color:var(--grau); font-size:14px; margin-bottom:12px}
+#suche{
+  width:100%; padding:14px 16px; font-size:19px; border-radius:12px;
+  border:1px solid var(--linie); background:var(--feld); color:var(--text);
+  -webkit-appearance:none;
+}
+#suche:focus{outline:2px solid var(--akzent); outline-offset:-1px}
+.maerkte{display:flex; flex-wrap:wrap; gap:7px; margin:11px 0 4px}
+.chip{
+  padding:6px 13px; border-radius:999px; border:1px solid var(--linie);
+  background:var(--karte); color:var(--grau); font-size:14px; cursor:pointer;
+  user-select:none; -webkit-tap-highlight-color:transparent;
+}
+.chip.an{background:var(--akzent); border-color:var(--akzent); color:#fff; font-weight:600}
+.hinweis{color:var(--grau); font-size:14px; padding:26px 2px}
+#prospekt{margin:9px 0 2px}
+.prospektknopf{
+  display:inline-block; padding:11px 18px; border-radius:11px;
+  background:var(--karte); border:1px solid var(--akzent); color:var(--akzent);
+  font-weight:600; font-size:16px; text-decoration:none;
+}
+.prospektknopf:active{opacity:.6}
+.kein{color:var(--grau); font-size:14px}
+h2{
+  font-size:15px; text-transform:uppercase; letter-spacing:.07em; color:var(--grau);
+  margin:26px 0 9px; padding-bottom:6px; border-bottom:1px solid var(--linie);
+}
+.liste{display:grid; grid-template-columns:repeat(auto-fill,minmax(310px,1fr)); gap:9px}
+.karte{
+  background:var(--karte); border:1px solid var(--linie); border-radius:12px;
+  padding:12px 14px; display:flex; gap:12px; align-items:flex-start;
+}
+.karte .txt{flex:1; min-width:0}
+.name{font-weight:600; margin-bottom:2px}
+.zusatz{color:var(--grau); font-size:14px; overflow-wrap:anywhere}
+.zeile{color:var(--grau); font-size:13px; margin-top:5px}
+.markt{color:var(--text); font-weight:600}
+.preisblock{text-align:right; white-space:nowrap}
+.preis{font-size:21px; font-weight:700; color:var(--akzent)}
+.alt{font-size:13px; color:var(--grau); text-decoration:line-through}
+.spaeter{color:var(--warn); font-weight:600}
+footer{color:var(--grau); font-size:13px; margin-top:40px; border-top:1px solid var(--linie); padding-top:12px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Angebote</h1>
+  <div class="stand" id="stand"></div>
+  <input id="suche" type="search" placeholder="Was suchst Du? z. B. Erdbeeren" autocomplete="off" autocorrect="off">
+  <div class="maerkte" id="maerkte"></div>
+  <div id="prospekt"></div>
+</header>
+<div id="ausgabe"></div>
+<footer id="fuss"></footer>
+
+<script>
+const DATEN = /*DATEN*/;
+const WT = ["Sonntag","Montag","Dienstag","Mittwoch","Donnerstag","Freitag","Samstag"];
+const heute = new Date(); heute.setHours(0,0,0,0);
+
+function d(s){ if(!s) return null; const t=new Date(s+"T12:00:00"); return isNaN(t)?null:t; }
+function schoen(s){ const t=d(s); if(!t) return "";
+  return WT[t.getDay()]+", "+String(t.getDate()).padStart(2,"0")+"."+String(t.getMonth()+1).padStart(2,"0")+"."; }
+function preisTxt(p){ return (typeof p==="number") ? p.toFixed(2).replace(".",",")+" €" : ""; }
+
+let markt = null;
+const alleMaerkte = [...new Set(DATEN.angebote.map(a=>a.markt).concat(Object.keys(DATEN.prospekte || {})))].sort((a,b)=>a.localeCompare(b,"de"));
+
+document.getElementById("stand").textContent =
+  DATEN.angebote.length + " Angebote in " + DATEN.ort + " · Stand " + DATEN.stand;
+
+const PROSPEKTE = DATEN.prospekte || {};
+function zeigeProspekt(){
+  const p = document.getElementById("prospekt");
+  if(!markt){ p.innerHTML = ""; return; }
+  const u = PROSPEKTE[markt];
+  p.innerHTML = u
+    ? '<a class="prospektknopf" href="'+u+'" target="_blank" rel="noopener">Prospekt von '+esc(markt)+' ansehen</a>'
+    : '<span class="kein">Für '+esc(markt)+' ist zurzeit kein Prospekt hinterlegt.</span>';
+}
+
+const mDiv = document.getElementById("maerkte");
+function baueChips(){
+  mDiv.innerHTML = "";
+  const alle = document.createElement("span");
+  alle.className = "chip" + (markt===null?" an":"");
+  alle.textContent = "Alle Märkte";
+  alle.onclick = ()=>{ markt=null; baueChips(); zeigeProspekt(); zeichne(); };
+  mDiv.appendChild(alle);
+  alleMaerkte.forEach(m=>{
+    const c = document.createElement("span");
+    c.className = "chip" + (markt===m?" an":"");
+    c.textContent = m;
+    c.onclick = ()=>{ markt = (markt===m?null:m); baueChips(); zeigeProspekt(); zeichne(); };
+    mDiv.appendChild(c);
+  });
+}
+
+function karte(a){
+  const bis = d(a.bis), von = d(a.von);
+  const kommt = von && von > heute;
+  let z = "";
+  if(kommt) z = '<span class="spaeter">ab '+schoen(a.von)+'</span>' + (a.bis?" bis "+schoen(a.bis):"");
+  else if(bis) z = "noch bis "+schoen(a.bis);
+  return '<div class="karte"><div class="txt">'
+    + '<div class="name">'+esc(a.name)+'</div>'
+    + (a.zusatz?'<div class="zusatz">'+esc(a.zusatz)+'</div>':'')
+    + '<div class="zeile"><span class="markt">'+esc(a.markt)+'</span>'+(z?' · '+z:'')+'</div>'
+    + '</div><div class="preisblock"><div class="preis">'+preisTxt(a.preis)+'</div>'
+    + (a.altpreis?'<div class="alt">'+preisTxt(a.altpreis)+'</div>':'')
+    + '</div></div>';
+}
+function esc(s){ return String(s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+function zeichne(){
+  const q = document.getElementById("suche").value.trim().toLowerCase();
+  const worte = q.split(/\s+/).filter(Boolean);
+  let liste = DATEN.angebote;
+  if(markt) liste = liste.filter(a=>a.markt===markt);
+  if(worte.length) liste = liste.filter(a=>{
+    const t = (a.name+" "+a.zusatz+" "+a.gruppe).toLowerCase();
+    return worte.every(w=>t.includes(w));
+  });
+  const aus = document.getElementById("ausgabe");
+  if(!liste.length){
+    const nurProspekt = markt && !DATEN.angebote.some(a=>a.markt===markt);
+    aus.innerHTML = nurProspekt
+      ? '<div class="hinweis">Für '+esc(markt)+' gibt es nur den Prospekt, keine einzelnen Angebote.</div>'
+      : '<div class="hinweis">Dazu ist gerade nichts im Angebot.</div>';
+    return;
+  }
+  let html = "";
+  if(worte.length){
+    const jetzt = liste.filter(a=>!(d(a.von)&&d(a.von)>heute));
+    const spaet = liste.filter(a=>  (d(a.von)&&d(a.von)>heute));
+    if(jetzt.length) html += '<h2>Gilt jetzt · '+jetzt.length+'</h2><div class="liste">'+jetzt.map(karte).join("")+'</div>';
+    if(spaet.length) html += '<h2>Kommt noch · '+spaet.length+'</h2><div class="liste">'+spaet.map(karte).join("")+'</div>';
+  } else {
+    const gruppen = [...new Set(liste.map(a=>a.gruppe))];
+    gruppen.forEach(g=>{
+      const teil = liste.filter(a=>a.gruppe===g);
+      html += '<h2>'+esc(g)+' · '+teil.length+'</h2><div class="liste">'+teil.map(karte).join("")+'</div>';
+    });
+  }
+  aus.innerHTML = html;
+}
+
+document.getElementById("suche").addEventListener("input", zeichne);
+document.getElementById("fuss").textContent =
+  "Quellen: Lidl, Edeka, Kaufland und Marktguru. Angaben ohne Gewähr — es gilt der Aushang im Markt.";
+baueChips();
+zeigeProspekt();
+zeichne();
+</script>
+</body>
+</html>
