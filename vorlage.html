@@ -26,12 +26,12 @@ body{
 header{position:sticky; top:0; background:var(--bg); padding:14px 0 10px; z-index:10}
 h1{font-size:26px; margin:0 0 2px; letter-spacing:-.01em}
 .stand{color:var(--grau); font-size:14px; margin-bottom:12px}
-#suche{
+#suche,#eigen{
   width:100%; padding:14px 16px; font-size:19px; border-radius:12px;
   border:1px solid var(--linie); background:var(--feld); color:var(--text);
   -webkit-appearance:none;
 }
-#suche:focus{outline:2px solid var(--akzent); outline-offset:-1px}
+#suche:focus,#eigen:focus{outline:2px solid var(--akzent); outline-offset:-1px}
 .maerkte{display:flex; flex-wrap:wrap; gap:7px; margin:11px 0 4px}
 .chip{
   padding:6px 13px; border-radius:999px; border:1px solid var(--linie);
@@ -74,17 +74,71 @@ h2{
 .alt{font-size:13px; color:var(--grau); text-decoration:line-through}
 .spaeter{color:var(--warn); font-weight:600}
 footer{color:var(--grau); font-size:13px; margin-top:40px; border-top:1px solid var(--linie); padding-top:12px}
+
+/* Einkaufsliste */
+.reiter{display:flex; gap:7px; margin:0 0 11px}
+.reiter .chip{font-size:15px; padding:7px 15px}
+.merk{
+  flex:0 0 auto; width:38px; height:38px; border-radius:999px;
+  border:1px solid var(--linie); background:var(--bg); color:var(--akzent);
+  font-size:22px; font-weight:700; line-height:36px; text-align:center;
+  cursor:pointer; user-select:none; -webkit-tap-highlight-color:transparent;
+}
+.merk.drauf{background:var(--akzent); border-color:var(--akzent); color:#fff}
+.merk:active{opacity:.6}
+.eingabe{display:flex; gap:8px; align-items:center; margin:11px 0 4px}
+.eingabe #eigen{flex:1}
+.zufuegen{
+  flex:0 0 auto; padding:14px 18px; border-radius:12px; font-size:17px;
+  font-weight:600; border:1px solid var(--akzent); background:var(--akzent);
+  color:#fff; cursor:pointer; user-select:none;
+  -webkit-tap-highlight-color:transparent;
+}
+.zufuegen:active{opacity:.6}
+.punkt{
+  background:var(--karte); border:1px solid var(--linie); border-radius:12px;
+  padding:12px 14px; display:flex; gap:12px; align-items:center;
+}
+.punkt .txt{flex:1; min-width:0}
+.punkt.ab .txt{opacity:.45; text-decoration:line-through}
+.hak{
+  flex:0 0 auto; width:30px; height:30px; border-radius:8px;
+  border:2px solid var(--akzent); background:var(--bg); color:#fff;
+  font-size:18px; line-height:26px; text-align:center; cursor:pointer;
+  user-select:none; -webkit-tap-highlight-color:transparent;
+}
+.hak.an{background:var(--akzent)}
+.weg{
+  flex:0 0 auto; padding:6px 11px; border-radius:999px; border:1px solid var(--linie);
+  background:var(--bg); color:var(--grau); font-size:15px; cursor:pointer;
+  user-select:none; -webkit-tap-highlight-color:transparent;
+}
+.weg:active{opacity:.6}
+.listenknoepfe{margin:22px 0 0; display:flex; flex-wrap:wrap; gap:8px}
 </style>
 </head>
 <body>
 <header>
   <h1>Angebote</h1>
   <div class="stand"><span id="stand"></span><span class="neuknopf" id="neuladen">Neu laden</span></div>
-  <input id="suche" type="search" placeholder="Was suchst Du? z. B. Erdbeeren" autocomplete="off" autocorrect="off">
-  <div class="maerkte" id="maerkte"></div>
-  <div id="prospekt"></div>
+  <div class="reiter">
+    <span class="chip an" id="reiterAngebote">Angebote</span>
+    <span class="chip" id="reiterListe">Einkaufsliste</span>
+  </div>
+  <div id="teilAngebote">
+    <input id="suche" type="search" placeholder="Was suchst Du? z. B. Erdbeeren" autocomplete="off" autocorrect="off">
+    <div class="maerkte" id="maerkte"></div>
+    <div id="prospekt"></div>
+  </div>
+  <div id="teilListe" style="display:none">
+    <div class="eingabe">
+      <input id="eigen" type="text" placeholder="Eigener Artikel, z. B. Milch" autocomplete="off" autocorrect="off">
+      <span class="zufuegen" id="zufuegen">Auf die Liste</span>
+    </div>
+  </div>
 </header>
 <div id="ausgabe"></div>
+<div id="listeausgabe" style="display:none"></div>
 <footer id="fuss"></footer>
 
 <script>
@@ -96,8 +150,10 @@ function d(s){ if(!s) return null; const t=new Date(s+"T12:00:00"); return isNaN
 function schoen(s){ const t=d(s); if(!t) return "";
   return WT[t.getDay()]+", "+String(t.getDate()).padStart(2,"0")+"."+String(t.getMonth()+1).padStart(2,"0")+"."; }
 function preisTxt(p){ return (typeof p==="number") ? p.toFixed(2).replace(".",",")+" €" : ""; }
+function esc(s){ return String(s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
 
 let markt = null;
+DATEN.angebote.forEach((a,i)=>{ a._i = i; });
 const alleMaerkte = [...new Set(DATEN.angebote.map(a=>a.markt).concat(Object.keys(DATEN.prospekte || {})))].sort((a,b)=>a.localeCompare(b,"de"));
 
 document.getElementById("stand").textContent =
@@ -109,6 +165,146 @@ document.getElementById("neuladen").onclick = function(){
   location.replace(location.pathname + "?t=" + Date.now());
 };
 
+/* ---------------------------------------------------------------
+   Einkaufsliste
+   Liegt NUR im Speicher des Browsers (iPad: Safari). Sie geht nicht
+   zu GitHub, weil die Seite oeffentlich ist. Bei einer Web-App auf
+   dem Startbildschirm loescht Safari diesen Speicher nicht nach
+   sieben Tagen.
+   Faellt der Speicher aus (privates Fenster, Speicher voll), laeuft
+   die Seite weiter; die Liste ist dann nur bis zum Neuladen da.
+--------------------------------------------------------------- */
+const SCHLUESSEL = "einkaufsliste";
+let merkliste = ladeListe();
+
+function ladeListe(){
+  try{
+    const roh = localStorage.getItem(SCHLUESSEL);
+    const l = roh ? JSON.parse(roh) : [];
+    return Array.isArray(l) ? l : [];
+  }catch(e){ return []; }
+}
+function sichereListe(){
+  try{ localStorage.setItem(SCHLUESSEL, JSON.stringify(merkliste)); }catch(e){}
+}
+function kennung(a){ return a.markt + "|" + a.name + "|" + (a.preis===undefined?"":a.preis); }
+function istDrauf(id){ return merkliste.some(p=>p.id===id); }
+
+function aufDieListe(a){
+  const id = kennung(a);
+  if(istDrauf(id)) return;
+  merkliste.push({
+    id: id, name: a.name, zusatz: a.zusatz || "", markt: a.markt,
+    preis: (typeof a.preis==="number" ? a.preis : null),
+    bis: a.bis || "", ab: false
+  });
+  sichereListe();
+}
+function eigenerArtikel(text){
+  const t = text.trim();
+  if(!t) return;
+  merkliste.push({
+    id: "eigen|" + Date.now() + "|" + Math.random().toString(36).slice(2,7),
+    name: t, zusatz: "", markt: "", preis: null, bis: "", ab: false
+  });
+  sichereListe();
+}
+function vonDerListe(id){
+  merkliste = merkliste.filter(p=>p.id!==id);
+  sichereListe();
+}
+
+function zaehlerSchreiben(){
+  const offen = merkliste.filter(p=>!p.ab).length;
+  document.getElementById("reiterListe").textContent =
+    merkliste.length ? "Einkaufsliste · " + offen : "Einkaufsliste";
+}
+
+/* ---- Umschalten zwischen Angeboten und Liste ---- */
+let ansicht = "angebote";
+function zeigeAnsicht(){
+  const listeAn = (ansicht === "liste");
+  document.getElementById("teilAngebote").style.display = listeAn ? "none" : "";
+  document.getElementById("teilListe").style.display    = listeAn ? "" : "none";
+  document.getElementById("ausgabe").style.display      = listeAn ? "none" : "";
+  document.getElementById("listeausgabe").style.display = listeAn ? "" : "none";
+  document.getElementById("reiterAngebote").className = "chip" + (listeAn ? "" : " an");
+  document.getElementById("reiterListe").className    = "chip" + (listeAn ? " an" : "");
+  if(listeAn) zeichneListe(); else zeichne();
+}
+document.getElementById("reiterAngebote").onclick = ()=>{ ansicht="angebote"; zeigeAnsicht(); };
+document.getElementById("reiterListe").onclick    = ()=>{ ansicht="liste";    zeigeAnsicht(); };
+
+document.getElementById("zufuegen").onclick = function(){
+  const feld = document.getElementById("eigen");
+  eigenerArtikel(feld.value);
+  feld.value = "";
+  zaehlerSchreiben();
+  zeichneListe();
+};
+document.getElementById("eigen").addEventListener("keydown", function(e){
+  if(e.key === "Enter"){ e.preventDefault(); document.getElementById("zufuegen").onclick(); }
+});
+
+/* ---- Die Liste zeichnen, nach Maerkten geordnet ---- */
+function zeichneListe(){
+  const aus = document.getElementById("listeausgabe");
+  if(!merkliste.length){
+    aus.innerHTML = '<div class="hinweis">Die Liste ist leer. '
+      + 'Bei jedem Angebot rechts auf + tippen, oder oben einen eigenen Artikel eintragen.</div>';
+    return;
+  }
+  const maerkte = [...new Set(merkliste.map(p=>p.markt))]
+    .sort((a,b)=>{ if(!a) return 1; if(!b) return -1; return a.localeCompare(b,"de"); });
+  let html = "";
+  maerkte.forEach(m=>{
+    const teil = merkliste.filter(p=>p.markt===m);
+    const kopf = m ? esc(m) : "Ohne Markt";
+    html += '<h2>' + kopf + ' · ' + teil.length + '</h2><div class="liste">'
+      + teil.map(punkt).join("") + '</div>';
+  });
+  html += '<div class="listenknoepfe">'
+       +  '<span class="weg" id="wegAbgehakt">Abgehakte entfernen</span>'
+       +  '<span class="weg" id="wegAlles">Liste leeren</span>'
+       +  '</div>';
+  aus.innerHTML = html;
+  document.getElementById("wegAbgehakt").onclick = function(){
+    merkliste = merkliste.filter(p=>!p.ab);
+    sichereListe(); zaehlerSchreiben(); zeichneListe(); zeichne();
+  };
+  document.getElementById("wegAlles").onclick = function(){
+    merkliste = [];
+    sichereListe(); zaehlerSchreiben(); zeichneListe(); zeichne();
+  };
+}
+function punkt(p){
+  const preis = (typeof p.preis==="number") ? preisTxt(p.preis) : "";
+  const bis = p.bis ? "noch bis " + schoen(p.bis) : "";
+  return '<div class="punkt' + (p.ab?" ab":"") + '">'
+    + '<span class="hak' + (p.ab?" an":"") + '" data-id="' + esc(p.id) + '">' + (p.ab?"✓":"") + '</span>'
+    + '<div class="txt"><div class="name">' + esc(p.name) + '</div>'
+    + (p.zusatz ? '<div class="zusatz">' + esc(p.zusatz) + '</div>' : '')
+    + (bis ? '<div class="zeile">' + bis + '</div>' : '')
+    + '</div>'
+    + (preis ? '<div class="preisblock"><div class="preis">' + preis + '</div></div>' : '')
+    + '<span class="weg" data-weg="' + esc(p.id) + '">×</span>'
+    + '</div>';
+}
+document.getElementById("listeausgabe").addEventListener("click", function(e){
+  const hak = e.target.closest(".hak");
+  if(hak){
+    const p = merkliste.find(x=>x.id===hak.dataset.id);
+    if(p){ p.ab = !p.ab; sichereListe(); zaehlerSchreiben(); zeichneListe(); }
+    return;
+  }
+  const weg = e.target.closest("[data-weg]");
+  if(weg){
+    vonDerListe(weg.dataset.weg);
+    zaehlerSchreiben(); zeichneListe(); zeichne();
+  }
+});
+
+/* ---- Angebote ---- */
 const PROSPEKTE = DATEN.prospekte || {};
 function zeigeProspekt(){
   const p = document.getElementById("prospekt");
@@ -139,6 +335,7 @@ function baueChips(){
 function karte(a){
   const bis = d(a.bis), von = d(a.von);
   const kommt = von && von > heute;
+  const drauf = istDrauf(kennung(a));
   let z = "";
   if(kommt) z = '<span class="spaeter">ab '+schoen(a.von)+'</span>' + (a.bis?" bis "+schoen(a.bis):"");
   else if(bis) z = "noch bis "+schoen(a.bis);
@@ -148,9 +345,21 @@ function karte(a){
     + '<div class="zeile"><span class="markt">'+esc(a.markt)+'</span>'+(z?' · '+z:'')+'</div>'
     + '</div><div class="preisblock"><div class="preis">'+preisTxt(a.preis)+'</div>'
     + (a.altpreis?'<div class="alt">'+preisTxt(a.altpreis)+'</div>':'')
-    + '</div></div>';
+    + '</div>'
+    + '<span class="merk'+(drauf?' drauf':'')+'" data-i="'+a._i+'">'+(drauf?'✓':'+')+'</span>'
+    + '</div>';
 }
-function esc(s){ return String(s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+document.getElementById("ausgabe").addEventListener("click", function(e){
+  const knopf = e.target.closest(".merk");
+  if(!knopf) return;
+  const a = DATEN.angebote[Number(knopf.dataset.i)];
+  if(!a) return;
+  const id = kennung(a);
+  if(istDrauf(id)){ vonDerListe(id); knopf.className = "merk"; knopf.textContent = "+"; }
+  else           { aufDieListe(a);   knopf.className = "merk drauf"; knopf.textContent = "✓"; }
+  zaehlerSchreiben();
+});
 
 function zeichne(){
   const q = document.getElementById("suche").value.trim().toLowerCase();
@@ -190,6 +399,7 @@ document.getElementById("fuss").textContent =
   "Quellen: Lidl, Edeka, Kaufland und Marktguru. Angaben ohne Gewähr — es gilt der Aushang im Markt.";
 baueChips();
 zeigeProspekt();
+zaehlerSchreiben();
 zeichne();
 </script>
 </body>
