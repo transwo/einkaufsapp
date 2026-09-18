@@ -54,7 +54,7 @@ ORDNER = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, ORDNER)
 from gruppen import gruppe_von, ALLE_GRUPPEN  # noqa: E402
 
-VERSION = "12"
+VERSION = "13"
 PLZ = "01279"
 ORT = "Dresden"
 BERICHT = []
@@ -732,8 +732,18 @@ PROSPEKT_KANDIDATEN = {
 # (rewe.de antwortet dort mit HTTP 403, am PC mit 200 - gemessen 17.09.2026).
 # Antwortet keine Adresse, wird diese fest eingetragen. Nur fuer Adressen,
 # die am PC schon einmal geantwortet haben.
+def rewe_prospekt_gerechnet():
+    """Seit Fassung 13: die Prospektadresse des Marktes selbst ausrechnen.
+    Sie besteht nur aus Kalenderwoche und Marktnummer - gemessen an der
+    Marktseite am 17.09.2026 (week=38, wwident=4031024). Sonntags gilt
+    schon die naechste Woche, wie bei den Angeboten."""
+    naechste, montag, _ = _rewe_woche()
+    kw = montag.isocalendar()[1]
+    return "https://services.publitas.com/rewe/publications?week=%d&wwident=%s" % (kw, REWE_MARKT)
+
+
 FESTER_PROSPEKT = {
-    "REWE": "https://www.rewe.de/angebote/",
+    "REWE": rewe_prospekt_gerechnet,
 }
 
 
@@ -764,8 +774,10 @@ def prospekte(maerkte):
             except Exception as e:
                 sag("  %-10s Fehler %s  %s" % (m, str(e)[:60], u))
         if m not in ergebnis and m in FESTER_PROSPEKT:
-            ergebnis[m] = FESTER_PROSPEKT[m]
-            sag("  %-10s fest eingetragen (Pruefung gesperrt)  %s" % (m, FESTER_PROSPEKT[m]))
+            wert = FESTER_PROSPEKT[m]
+            adr = wert() if callable(wert) else wert
+            ergebnis[m] = adr
+            sag("  %-10s fest eingetragen (Pruefung gesperrt)  %s" % (m, adr))
         if m not in ergebnis:
             sag("  %-10s keine Adresse gefunden" % m)
     return ergebnis
