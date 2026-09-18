@@ -124,35 +124,34 @@ footer{color:var(--grau); font-size:13px; margin-top:40px; border-top:1px solid 
 .druckknopf:active{opacity:.6}
 
 /* Zettel zum Ausdrucken
-   Das Blatt liegt im hinteren Fach rechts an. Ein A6-Zettel
-   (105 x 148 mm) deckt deshalb die rechte obere Ecke des A4-Bereichs
-   ab. Genau dorthin wird gedruckt.
+   Gemessen 18.09.2026 an einem vollen A4-Blatt: Die Anschlagseite des
+   Druckers ist im Druckbild LINKS. Ein dort angelegter A6-Zettel
+   (105 x 148 mm) deckt deshalb die LINKE obere Ecke des A4-Bereichs ab.
    Safari setzt die Raender aus @page NICHT um (bekannter Fehler,
-   mdn/browser-compat-data 23178). Der Zettel wird deshalb ueber den
-   Textblock selbst nach rechts geschoben: 85 mm breit, rechtsbuendig.
-   So bleibt links und rechts Luft, egal welchen Rand Safari selbst
-   setzt. Die Hoehe begrenzt `drucke()` beim Bauen.
+   mdn/browser-compat-data 23178). Der Textblock wird deshalb ueber
+   sich selbst gesetzt: 88 mm breit, linksbuendig. Die Hoehe begrenzt
+   `drucke()` beim Bauen.
    Im Druckfenster A4 waehlen; A5 bietet das iPad nicht an. */
 #druck{display:none}
 @media print{
-  @page{ size: A4 portrait; margin: 10mm; }
+  @page{ size: A4 portrait; margin: 6mm; }
   html,body{ background:#fff !important; color:#000 !important;
              margin:0; padding:0; max-width:none; font-size:10pt; }
   header,#ausgabe,#listeausgabe,footer{ display:none !important }
   #druck{ display:block; width:100% }
-  #druck .dzettel{ width:85mm; margin-left:auto; margin-right:0 }
+  #druck .dzettel{ width:88mm; margin-left:0; margin-right:auto;
+                   overflow:hidden }
   #druck .dumbruch{ height:0; break-after:page; page-break-after:always }
-  #druck .dkopf{ font-size:13pt; font-weight:700; margin:0 }
-  #druck .ddatum{ font-size:8pt; color:#333; margin:0 0 3mm }
+  #druck .dkopf{ font-size:13pt; font-weight:700; margin:0 0 2.5mm;
+                 padding-bottom:1mm; border-bottom:1pt solid #000 }
+  #druck .dkopf span{ font-size:8pt; font-weight:400; color:#333 }
   #druck .dmarkt{ font-size:10pt; font-weight:700; margin:3mm 0 1mm;
                   padding-bottom:.6mm; border-bottom:1pt solid #000;
                   break-after:avoid; page-break-after:avoid }
   #druck .dzeile{ display:flex; gap:2.5mm; align-items:flex-start;
                   padding:.9mm 0; border-bottom:.3pt dotted #999;
                   break-inside:avoid; page-break-inside:avoid }
-  #druck .dkasten{ flex:0 0 auto; width:4mm; height:4mm;
-                   border:.8pt solid #000; margin-top:.7mm }
-  #druck .dname{ flex:1; overflow-wrap:anywhere }
+  #druck .dname{ flex:1; min-width:0; overflow-wrap:anywhere }
   #druck .dname small{ display:block; font-size:8pt; color:#444;
                        white-space:nowrap; overflow:hidden;
                        text-overflow:ellipsis }
@@ -234,13 +233,32 @@ function sichereListe(){
 function kennung(a){ return a.markt + "|" + a.name + "|" + (a.preis===undefined?"":a.preis); }
 function istDrauf(id){ return merkliste.some(p=>p.id===id); }
 
+/* Abgelaufenes fliegt von selbst heraus. Entschieden wird nur nach dem
+   Enddatum, NICHT danach, ob das Angebot noch in den Daten steht:
+   Sperrt rewe.de den naechtlichen Lauf, fehlen die REWE-Angebote, und
+   die halbe Liste waere sonst am Morgen weg. */
+function aufraeumen(){
+  const vorher = merkliste.length;
+  merkliste = merkliste.filter(p=>{
+    if(!p.bis) return true;
+    const b = d(p.bis);
+    return !b || b >= heute;
+  });
+  if(merkliste.length !== vorher) sichereListe();
+}
+/* Gilt der Punkt erst spaeter? */
+function istSpaeter(p){
+  const v = p.von ? d(p.von) : null;
+  return !!(v && v > heute);
+}
+
 function aufDieListe(a){
   const id = kennung(a);
   if(istDrauf(id)) return;
   merkliste.push({
     id: id, name: a.name, zusatz: a.zusatz || "", markt: a.markt,
     preis: (typeof a.preis==="number" ? a.preis : null),
-    bis: a.bis || "", ab: false
+    von: a.von || "", bis: a.bis || "", ab: false
   });
   sichereListe();
 }
@@ -249,7 +267,7 @@ function eigenerArtikel(text){
   if(!t) return;
   merkliste.push({
     id: "eigen|" + Date.now() + "|" + Math.random().toString(36).slice(2,7),
-    name: t, zusatz: "", markt: "", preis: null, bis: "", ab: false
+    name: t, zusatz: "", markt: "", preis: null, von: "", bis: "", ab: false
   });
   sichereListe();
 }
@@ -290,23 +308,38 @@ document.getElementById("eigen").addEventListener("keydown", function(e){
   if(e.key === "Enter"){ e.preventDefault(); document.getElementById("zufuegen").onclick(); }
 });
 
-/* ---- Die Liste zeichnen, nach Maerkten geordnet ---- */
+/* ---- Die Liste zeichnen ----
+   Zwei Teile: was jetzt gilt, und was erst spaeter kommt. Innerhalb
+   jedes Teils nach Maerkten. Abgelaufenes ist vorher heraus. */
 function zeichneListe(){
+  aufraeumen();
   const aus = document.getElementById("listeausgabe");
   if(!merkliste.length){
     aus.innerHTML = '<div class="hinweis">Die Liste ist leer. '
       + 'Bei jedem Angebot rechts auf + tippen, oder oben einen eigenen Artikel eintragen.</div>';
     return;
   }
-  const maerkte = [...new Set(merkliste.map(p=>p.markt))]
-    .sort((a,b)=>{ if(!a) return 1; if(!b) return -1; return a.localeCompare(b,"de"); });
+  function teilBauen(punkte){
+    const maerkte = [...new Set(punkte.map(p=>p.markt))]
+      .sort((a,b)=>{ if(!a) return 1; if(!b) return -1; return a.localeCompare(b,"de"); });
+    let s = "";
+    maerkte.forEach(m=>{
+      const teil = punkte.filter(p=>p.markt===m);
+      s += '<h2>' + (m ? esc(m) : "Ohne Markt") + ' · ' + teil.length + '</h2>'
+         + '<div class="liste">' + teil.map(punkt).join("") + '</div>';
+    });
+    return s;
+  }
+  const jetzt  = merkliste.filter(p=>!istSpaeter(p));
+  const spaet  = merkliste.filter(p=> istSpaeter(p));
   let html = "";
-  maerkte.forEach(m=>{
-    const teil = merkliste.filter(p=>p.markt===m);
-    const kopf = m ? esc(m) : "Ohne Markt";
-    html += '<h2>' + kopf + ' · ' + teil.length + '</h2><div class="liste">'
-      + teil.map(punkt).join("") + '</div>';
-  });
+  if(jetzt.length){
+    if(spaet.length) html += '<div class="abschnitt">Jetzt kaufen</div>';
+    html += teilBauen(jetzt);
+  }
+  if(spaet.length){
+    html += '<div class="abschnitt warnfarbe">Kommt noch</div>' + teilBauen(spaet);
+  }
   html += '<div class="listenknoepfe">'
        +  '<span class="druckknopf" id="drucken">Drucken</span>'
        +  '<span class="weg" id="wegAbgehakt">Abgehakte entfernen</span>'
@@ -325,28 +358,46 @@ function zeichneListe(){
 }
 function punkt(p){
   const preis = (typeof p.preis==="number") ? preisTxt(p.preis) : "";
-  const bis = p.bis ? "noch bis " + schoen(p.bis) : "";
+  const zeit = istSpaeter(p)
+    ? '<span class="spaeter">ab ' + schoen(p.von) + '</span>'
+      + (p.bis ? " bis " + schoen(p.bis) : "")
+    : (p.bis ? "noch bis " + schoen(p.bis) : "");
   return '<div class="punkt' + (p.ab?" ab":"") + '">'
     + '<span class="hak' + (p.ab?" an":"") + '" data-id="' + esc(p.id) + '">' + (p.ab?"✓":"") + '</span>'
     + '<div class="txt"><div class="name">' + esc(p.name) + '</div>'
     + (p.zusatz ? '<div class="zusatz">' + esc(p.zusatz) + '</div>' : '')
-    + (bis ? '<div class="zeile">' + bis + '</div>' : '')
+    + (zeit ? '<div class="zeile">' + zeit + '</div>' : '')
     + '</div>'
     + (preis ? '<div class="preisblock"><div class="preis">' + preis + '</div></div>' : '')
     + '<span class="weg" data-weg="' + esc(p.id) + '">×</span>'
     + '</div>';
 }
 /* ---- Zettel drucken ----
-   Gedruckt werden nur die noch offenen Punkte, nach Märkten geordnet.
+   Gedruckt wird nur, was JETZT gilt — was erst später kommt, steht
+   als eine magere Zeile unten drunter, damit es nicht vergessen wird,
+   aber im Laden nicht gesucht wird. Geordnet nach Märkten.
    Der Zettel ist 105 x 148 mm und liegt rechts oben auf dem A4-Bogen.
    Safari kümmert sich nicht um die Ränder aus @page, deshalb wird die
    Höhe hier beim Bauen gerechnet: Passt die nächste Zeile nicht mehr
    in die 115 mm, fängt ein neuer Zettel an. Die Werte sind gemessene
    Zeilenhöhen bei 10 pt. */
 const ZETTEL_MM = 115;
+function kurz(s, n){
+  s = String(s || "").trim();
+  return s.length > n ? s.slice(0, n-1).trim() + "…" : s;
+}
 function drucke(){
-  const offen = merkliste.filter(p=>!p.ab);
-  if(!offen.length) return;
+  aufraeumen();
+  const offen  = merkliste.filter(p=>!p.ab && !istSpaeter(p));
+  const spaet  = merkliste.filter(p=>!p.ab &&  istSpaeter(p));
+  if(!offen.length && !spaet.length) return;
+  let fussnote = "";
+  if(spaet.length){
+    const erste = spaet.map(p=>p.von).sort()[0];
+    fussnote = '<div class="dspaet">' + spaet.length
+             + (spaet.length===1 ? " Punkt kommt" : " Punkte kommen")
+             + " erst ab " + schoen(erste) + '</div>';
+  }
   const t = new Date();
   const datum = String(t.getDate()).padStart(2,"0") + "."
               + String(t.getMonth()+1).padStart(2,"0") + "." + t.getFullYear();
@@ -357,9 +408,9 @@ function drucke(){
   let teil = "";        // laufender Zettel
   let hoehe = 0;
   function anfangen(kopf){
-    teil = '<div class="dkopf">Einkaufsliste</div>'
-         + '<div class="ddatum">' + datum + ' · ' + offen.length + ' Punkte</div>';
-    hoehe = 12;
+    teil = '<div class="dkopf">Einkaufsliste <span>' + datum + ' · '
+         + offen.length + ' Punkte</span></div>';
+    hoehe = 9;
     if(kopf){ teil += kopf; hoehe += 8; }
   }
   function umbrechen(kopf){ zettel.push(teil); anfangen(kopf); }
@@ -371,9 +422,10 @@ function drucke(){
     else { teil += kopf; hoehe += 8; }
     offen.filter(p=>p.markt===m).forEach(p=>{
       const preis = (typeof p.preis==="number") ? preisTxt(p.preis) : "";
-      const zeile = '<div class="dzeile"><span class="dkasten"></span>'
-        + '<span class="dname">' + esc(p.name)
-        + (p.zusatz ? '<small>' + esc(p.zusatz) + '</small>' : '')
+      const zus = kurz(p.zusatz, 38);
+      const zeile = '<div class="dzeile">'
+        + '<span class="dname">' + esc(kurz(p.name, 46))
+        + (zus ? '<small>' + esc(zus) + '</small>' : '')
         + '</span>'
         + (preis ? '<span class="dpreis">' + preis + '</span>' : '')
         + '</div>';
@@ -382,6 +434,8 @@ function drucke(){
       teil += zeile; hoehe += h;
     });
   });
+  if(!offen.length) teil += '<div class="dspaet">Nichts, was jetzt gilt.</div>';
+  teil += fussnote;
   zettel.push(teil);
 
   document.getElementById("druck").innerHTML = zettel
