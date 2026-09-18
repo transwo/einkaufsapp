@@ -133,7 +133,7 @@ footer{color:var(--grau); font-size:13px; margin-top:40px; border-top:1px solid 
    (105 x 148 mm) deckt deshalb die LINKE obere Ecke des A4-Bereichs ab.
    Safari setzt die Raender aus @page NICHT um (bekannter Fehler,
    mdn/browser-compat-data 23178). Der Textblock wird deshalb ueber
-   sich selbst gesetzt: 88 mm breit, linksbuendig. Die Hoehe begrenzt
+   sich selbst gesetzt: 70 mm breit, linksbuendig. Die Hoehe begrenzt
    `drucke()` beim Bauen.
    Im Druckfenster A4 waehlen; A5 bietet das iPad nicht an. */
 #druck{display:none}
@@ -142,39 +142,34 @@ footer{color:var(--grau); font-size:13px; margin-top:40px; border-top:1px solid 
      und 15 mm oben. Am PC (Chrome, Firefox) gilt sie. */
   @page{ size: A4 portrait; margin: 8mm; }
   html,body{ background:#fff !important; color:#000 !important;
-             margin:0; padding:0; max-width:none; font-size:8pt;
-             line-height:1.25; }
+             margin:0; padding:0; max-width:none; font-size:7pt;
+             line-height:1.2; }
   header,#ausgabe,#listeausgabe,footer{ display:none !important }
   #druck{ display:block; width:100% }
-  /* Safari setzt selbst rund 13 mm Rand links und 15 mm oben (am Druck
-     gemessen). Die negativen Ränder holen davon 9 mm zurück, sodass
-     rund 4 mm bleiben — näher an die Kante geht nicht, der Drucker
-     kann die äußeren rund 3 mm gar nicht bedrucken. Der Block ist dann
-     92 mm breit und endet rund 96 mm von der Blattkante entfernt, der
-     Zettel ist 105 mm breit. */
   /* Die Ränder, die Safari selbst setzt (rund 13 mm links, 15 mm
      oben), lassen sich nicht wegnehmen — gemessen: ein negativer
      Rand schneidet die ersten Buchstaben ab, `transform` hebt den
-     Seitenumbruch auf. Der Zettel ist deshalb 85 mm breit; damit endet
-     er rund 98 mm von der Kante, der A6-Zettel ist 105 mm breit. */
-  #druck .dzettel{ width:85mm; margin-left:0; margin-right:auto;
+     Seitenumbruch auf. Der Textblock ist deshalb 70 mm breit; damit
+     endet er rund 83 mm von der Kante, der A6-Zettel ist 105 mm
+     breit, und die Preise stehen nicht ganz aussen. */
+  #druck .dzettel{ width:70mm; margin-left:0; margin-right:auto;
                    overflow:hidden }
   #druck .dumbruch{ height:0; break-after:page; page-break-after:always }
-  #druck .dkopf{ font-size:10.5pt; font-weight:700; margin:0 0 1.8mm;
-                 padding-bottom:.8mm; border-bottom:1pt solid #000 }
-  #druck .dkopf span{ font-size:7pt; font-weight:400; color:#333 }
-  #druck .dmarkt{ font-size:8.5pt; font-weight:700; margin:2.2mm 0 .8mm;
-                  padding-bottom:.5mm; border-bottom:.8pt solid #000;
+  #druck .dkopf{ font-size:9pt; font-weight:700; margin:0 0 1mm;
+                 padding-bottom:.4mm; border-bottom:.8pt solid #000 }
+  #druck .dkopf span{ font-size:6pt; font-weight:400; color:#333 }
+  #druck .dmarkt{ font-size:7.5pt; font-weight:700; margin:1.2mm 0 .4mm;
+                  padding-bottom:.3mm; border-bottom:.6pt solid #000;
                   break-after:avoid; page-break-after:avoid }
-  #druck .dzeile{ display:flex; gap:2.5mm; align-items:flex-start;
-                  padding:.6mm 0; border-bottom:.3pt dotted #999;
+  #druck .dzeile{ display:flex; gap:2mm; align-items:flex-start;
+                  padding:.4mm 0; border-bottom:.3pt dotted #999;
                   break-inside:avoid; page-break-inside:avoid }
   #druck .dname{ flex:1; min-width:0; overflow-wrap:anywhere }
-  #druck .dname small{ display:block; font-size:6.5pt; color:#444;
+  #druck .dname small{ display:block; font-size:5.5pt; color:#444;
                        white-space:nowrap; overflow:hidden;
                        text-overflow:ellipsis }
   #druck .dpreis{ white-space:nowrap; font-weight:700 }
-  #druck .dspaet{ margin-top:2.5mm; font-size:7pt; color:#333 }
+  #druck .dspaet{ margin-top:1.5mm; font-size:6pt; color:#333 }
 }
 </style>
 </head>
@@ -400,7 +395,7 @@ function punkt(p){
    Höhe hier beim Bauen gerechnet: Passt die nächste Zeile nicht mehr
    in die 115 mm, fängt ein neuer Zettel an. Die Werte sind gemessene
    Zeilenhöhen bei 10 pt. */
-const ZETTEL_MM = 108;
+const ZETTEL_MM = 100;
 function kurz(s, n){
   s = String(s || "").trim();
   return s.length > n ? s.slice(0, n-1).trim() + "…" : s;
@@ -429,26 +424,26 @@ function drucke(){
   function anfangen(kopf){
     teil = '<div class="dkopf">Einkaufsliste <span>' + datum + ' · '
          + offen.length + ' Punkte</span></div>';
-    hoehe = 7;
-    if(kopf){ teil += kopf; hoehe += 6; }
+    hoehe = 5.5;
+    if(kopf){ teil += kopf; hoehe += 4.5; }
   }
   function umbrechen(kopf){ zettel.push(teil); anfangen(kopf); }
   anfangen("");
 
   maerkte.forEach(m=>{
     const kopf = '<div class="dmarkt">' + (m ? esc(m) : "Ohne Markt") + '</div>';
-    if(hoehe + 6 + 7 > ZETTEL_MM) umbrechen(kopf);
-    else { teil += kopf; hoehe += 6; }
+    if(hoehe + 4.5 + 5 > ZETTEL_MM) umbrechen(kopf);
+    else { teil += kopf; hoehe += 4.5; }
     offen.filter(p=>p.markt===m).forEach(p=>{
       const preis = (typeof p.preis==="number") ? preisTxt(p.preis) : "";
-      const zus = kurz(p.zusatz, 56);
+      const zus = kurz(p.zusatz, 46);
       const zeile = '<div class="dzeile">'
-        + '<span class="dname">' + esc(kurz(p.name, 60))
+        + '<span class="dname">' + esc(kurz(p.name, 44))
         + (zus ? '<small>' + esc(zus) + '</small>' : '')
         + '</span>'
         + (preis ? '<span class="dpreis">' + preis + '</span>' : '')
         + '</div>';
-      let h = 4.2 + (p.zusatz ? 2.4 : 0) + (String(p.name).length > 42 ? 3 : 0);
+      let h = 3.2 + (p.zusatz ? 1.8 : 0) + (String(p.name).length > 34 ? 2.4 : 0);
       if(hoehe + h > ZETTEL_MM) umbrechen(kopf + '');
       teil += zeile; hoehe += h;
     });
