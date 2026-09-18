@@ -124,27 +124,29 @@ footer{color:var(--grau); font-size:13px; margin-top:40px; border-top:1px solid 
 .druckknopf:active{opacity:.6}
 
 /* Zettel zum Ausdrucken
-   Das Blatt liegt im hinteren Fach rechts an. Ein halbes A5-Blatt
-   (105 x 148 mm, quer eingelegt) deckt deshalb die rechte Spalte des
-   A5-Bereichs ab. Der linke Rand von 51 mm schiebt alles dorthin.
-   Im Druckfenster A5 waehlen. */
+   Das Blatt liegt im hinteren Fach rechts an. Ein A6-Zettel
+   (105 x 148 mm) deckt deshalb die rechte obere Ecke des A4-Bereichs
+   ab. Die Raender schieben alles dorthin.
+   Im Druckfenster A4 waehlen; A5 bietet das iPad nicht an. */
 #druck{display:none}
 @media print{
-  /* Unten bleiben 72 mm frei: das halbe A5-Blatt ist nur 148 mm lang,
-     der A5-Bereich aber 210 mm. Was darunter stünde, fiele neben das
-     Blatt. Passt die Liste nicht, geht sie auf den nächsten Zettel. */
-  @page{ size: A5 portrait; margin: 8mm 8mm 72mm 51mm; }
+  /* Unten bleiben 159 mm frei: der Zettel ist nur 148 mm lang, der
+     A4-Bereich aber 297 mm. Links bleiben 113 mm frei: der Zettel ist
+     105 mm breit und liegt rechts an. Was daneben stünde, fiele neben
+     das Blatt. Passt die Liste nicht, geht sie auf den nächsten
+     Zettel. */
+  @page{ size: A4 portrait; margin: 8mm 8mm 159mm 113mm; }
   html,body{ background:#fff !important; color:#000 !important;
              margin:0; padding:0; max-width:none; font-size:10pt; }
   header,#ausgabe,#listeausgabe,footer{ display:none !important }
   #druck{ display:block }
-  #druck .dkopf{ font-size:14pt; font-weight:700; margin:0 }
-  #druck .ddatum{ font-size:8.5pt; color:#333; margin:0 0 4mm }
-  #druck .dmarkt{ font-size:10.5pt; font-weight:700; margin:4mm 0 1.5mm;
-                  padding-bottom:.8mm; border-bottom:1pt solid #000;
+  #druck .dkopf{ font-size:13pt; font-weight:700; margin:0 }
+  #druck .ddatum{ font-size:8pt; color:#333; margin:0 0 3mm }
+  #druck .dmarkt{ font-size:10pt; font-weight:700; margin:3mm 0 1mm;
+                  padding-bottom:.6mm; border-bottom:1pt solid #000;
                   break-after:avoid; page-break-after:avoid }
   #druck .dzeile{ display:flex; gap:2.5mm; align-items:flex-start;
-                  padding:1.3mm 0; border-bottom:.3pt dotted #999;
+                  padding:.9mm 0; border-bottom:.3pt dotted #999;
                   break-inside:avoid; page-break-inside:avoid }
   #druck .dkasten{ flex:0 0 auto; width:4mm; height:4mm;
                    border:.8pt solid #000; margin-top:.7mm }
