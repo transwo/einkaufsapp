@@ -54,7 +54,7 @@ ORDNER = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, ORDNER)
 from gruppen import gruppe_von, ALLE_GRUPPEN  # noqa: E402
 
-VERSION = "11"
+VERSION = "12"
 PLZ = "01279"
 ORT = "Dresden"
 BERICHT = []
@@ -428,7 +428,10 @@ def rewe():
     pb = soup.select_one("[data-testid='sos-handbill-frame'][data-src], iframe[data-src*='publitas']") \
         or soup.find(attrs={"data-src": re.compile("publitas")})
     if pb and pb.get("data-src", "").startswith("https://"):
-        REWE_PROSPEKT[0] = pb.get("data-src")
+        # Der Zusatz "feature=download" liefert die Meldung "noch kein Prospekt
+        # hinterlegt" (gemessen 18.09.2026); ohne ihn kommt der Prospekt.
+        adr = pb.get("data-src").replace("&feature=download", "").replace("?feature=download&", "?")
+        REWE_PROSPEKT[0] = adr
         sag("Prospekt des Marktes: %s" % REWE_PROSPEKT[0])
     else:
         sag("Prospekt des Marktes: nicht auf der Seite gefunden")
