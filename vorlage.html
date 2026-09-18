@@ -47,6 +47,13 @@ h1{font-size:26px; margin:0 0 2px; letter-spacing:-.01em}
   font-weight:600; font-size:16px; text-decoration:none;
 }
 .prospektknopf:active{opacity:.6}
+.neuknopf{
+  display:inline-block; margin-left:10px; padding:4px 12px; border-radius:999px;
+  border:1px solid var(--linie); background:var(--karte); color:var(--grau);
+  font-size:14px; cursor:pointer; user-select:none;
+  -webkit-tap-highlight-color:transparent;
+}
+.neuknopf:active{opacity:.6}
 .kein{color:var(--grau); font-size:14px}
 h2{
   font-size:15px; text-transform:uppercase; letter-spacing:.07em; color:var(--grau);
@@ -72,7 +79,7 @@ footer{color:var(--grau); font-size:13px; margin-top:40px; border-top:1px solid 
 <body>
 <header>
   <h1>Angebote</h1>
-  <div class="stand" id="stand"></div>
+  <div class="stand"><span id="stand"></span><span class="neuknopf" id="neuladen">Neu laden</span></div>
   <input id="suche" type="search" placeholder="Was suchst Du? z. B. Erdbeeren" autocomplete="off" autocorrect="off">
   <div class="maerkte" id="maerkte"></div>
   <div id="prospekt"></div>
@@ -95,6 +102,12 @@ const alleMaerkte = [...new Set(DATEN.angebote.map(a=>a.markt).concat(Object.key
 
 document.getElementById("stand").textContent =
   DATEN.angebote.length + " Angebote in " + DATEN.ort + " · Stand " + DATEN.stand;
+
+// Neu laden: mit angehaengter Uhrzeit, sonst nimmt Safari die Seite aus
+// seinem Speicher (iPad, Symbol auf dem Startbildschirm).
+document.getElementById("neuladen").onclick = function(){
+  location.replace(location.pathname + "?t=" + Date.now());
+};
 
 const PROSPEKTE = DATEN.prospekte || {};
 function zeigeProspekt(){
