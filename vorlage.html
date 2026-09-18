@@ -115,6 +115,10 @@ footer{color:var(--grau); font-size:13px; margin-top:40px; border-top:1px solid 
 }
 .weg:active{opacity:.6}
 .listenknoepfe{margin:22px 0 0; display:flex; flex-wrap:wrap; gap:8px}
+.abschnitt{
+  margin:26px 0 2px; font-size:19px; font-weight:700; letter-spacing:-.01em;
+}
+.abschnitt.warnfarbe{color:var(--warn)}
 .druckknopf{
   flex:0 0 auto; padding:6px 13px; border-radius:999px;
   border:1px solid var(--akzent); background:var(--karte); color:var(--akzent);
@@ -134,28 +138,43 @@ footer{color:var(--grau); font-size:13px; margin-top:40px; border-top:1px solid 
    Im Druckfenster A4 waehlen; A5 bietet das iPad nicht an. */
 #druck{display:none}
 @media print{
-  @page{ size: A4 portrait; margin: 6mm; }
+  /* Safari ignoriert diese Zeile und setzt selbst rund 13 mm links
+     und 15 mm oben. Am PC (Chrome, Firefox) gilt sie. */
+  @page{ size: A4 portrait; margin: 8mm; }
   html,body{ background:#fff !important; color:#000 !important;
-             margin:0; padding:0; max-width:none; font-size:10pt; }
+             margin:0; padding:0; max-width:none; font-size:8pt;
+             line-height:1.25; }
   header,#ausgabe,#listeausgabe,footer{ display:none !important }
   #druck{ display:block; width:100% }
-  #druck .dzettel{ width:88mm; margin-left:0; margin-right:auto;
+  /* Safari setzt selbst rund 13 mm Rand links und 15 mm oben (am Druck
+     gemessen). Die negativen Ränder holen davon 9 mm zurück, sodass
+     rund 4 mm bleiben — näher an die Kante geht nicht, der Drucker
+     kann die äußeren rund 3 mm gar nicht bedrucken. Der Block ist dann
+     92 mm breit und endet rund 96 mm von der Blattkante entfernt, der
+     Zettel ist 105 mm breit. */
+  /* Die Ränder, die Safari selbst setzt (rund 13 mm links, 15 mm
+     oben), lassen sich nicht wegnehmen — gemessen: ein negativer
+     Rand schneidet die ersten Buchstaben ab, `transform` hebt den
+     Seitenumbruch auf. Der Zettel ist deshalb 85 mm breit; damit endet
+     er rund 98 mm von der Kante, der A6-Zettel ist 105 mm breit. */
+  #druck .dzettel{ width:85mm; margin-left:0; margin-right:auto;
                    overflow:hidden }
   #druck .dumbruch{ height:0; break-after:page; page-break-after:always }
-  #druck .dkopf{ font-size:13pt; font-weight:700; margin:0 0 2.5mm;
-                 padding-bottom:1mm; border-bottom:1pt solid #000 }
-  #druck .dkopf span{ font-size:8pt; font-weight:400; color:#333 }
-  #druck .dmarkt{ font-size:10pt; font-weight:700; margin:3mm 0 1mm;
-                  padding-bottom:.6mm; border-bottom:1pt solid #000;
+  #druck .dkopf{ font-size:10.5pt; font-weight:700; margin:0 0 1.8mm;
+                 padding-bottom:.8mm; border-bottom:1pt solid #000 }
+  #druck .dkopf span{ font-size:7pt; font-weight:400; color:#333 }
+  #druck .dmarkt{ font-size:8.5pt; font-weight:700; margin:2.2mm 0 .8mm;
+                  padding-bottom:.5mm; border-bottom:.8pt solid #000;
                   break-after:avoid; page-break-after:avoid }
   #druck .dzeile{ display:flex; gap:2.5mm; align-items:flex-start;
-                  padding:.9mm 0; border-bottom:.3pt dotted #999;
+                  padding:.6mm 0; border-bottom:.3pt dotted #999;
                   break-inside:avoid; page-break-inside:avoid }
   #druck .dname{ flex:1; min-width:0; overflow-wrap:anywhere }
-  #druck .dname small{ display:block; font-size:8pt; color:#444;
+  #druck .dname small{ display:block; font-size:6.5pt; color:#444;
                        white-space:nowrap; overflow:hidden;
                        text-overflow:ellipsis }
   #druck .dpreis{ white-space:nowrap; font-weight:700 }
+  #druck .dspaet{ margin-top:2.5mm; font-size:7pt; color:#333 }
 }
 </style>
 </head>
@@ -381,7 +400,7 @@ function punkt(p){
    Höhe hier beim Bauen gerechnet: Passt die nächste Zeile nicht mehr
    in die 115 mm, fängt ein neuer Zettel an. Die Werte sind gemessene
    Zeilenhöhen bei 10 pt. */
-const ZETTEL_MM = 115;
+const ZETTEL_MM = 108;
 function kurz(s, n){
   s = String(s || "").trim();
   return s.length > n ? s.slice(0, n-1).trim() + "…" : s;
@@ -410,26 +429,26 @@ function drucke(){
   function anfangen(kopf){
     teil = '<div class="dkopf">Einkaufsliste <span>' + datum + ' · '
          + offen.length + ' Punkte</span></div>';
-    hoehe = 9;
-    if(kopf){ teil += kopf; hoehe += 8; }
+    hoehe = 7;
+    if(kopf){ teil += kopf; hoehe += 6; }
   }
   function umbrechen(kopf){ zettel.push(teil); anfangen(kopf); }
   anfangen("");
 
   maerkte.forEach(m=>{
     const kopf = '<div class="dmarkt">' + (m ? esc(m) : "Ohne Markt") + '</div>';
-    if(hoehe + 8 + 9 > ZETTEL_MM) umbrechen(kopf);
-    else { teil += kopf; hoehe += 8; }
+    if(hoehe + 6 + 7 > ZETTEL_MM) umbrechen(kopf);
+    else { teil += kopf; hoehe += 6; }
     offen.filter(p=>p.markt===m).forEach(p=>{
       const preis = (typeof p.preis==="number") ? preisTxt(p.preis) : "";
-      const zus = kurz(p.zusatz, 38);
+      const zus = kurz(p.zusatz, 56);
       const zeile = '<div class="dzeile">'
-        + '<span class="dname">' + esc(kurz(p.name, 46))
+        + '<span class="dname">' + esc(kurz(p.name, 60))
         + (zus ? '<small>' + esc(zus) + '</small>' : '')
         + '</span>'
         + (preis ? '<span class="dpreis">' + preis + '</span>' : '')
         + '</div>';
-      let h = 6 + (p.zusatz ? 3 : 0) + (String(p.name).length > 30 ? 4 : 0);
+      let h = 4.2 + (p.zusatz ? 2.4 : 0) + (String(p.name).length > 42 ? 3 : 0);
       if(hoehe + h > ZETTEL_MM) umbrechen(kopf + '');
       teil += zeile; hoehe += h;
     });
@@ -553,6 +572,7 @@ document.getElementById("fuss").textContent =
   "Quellen: Lidl, Edeka, Kaufland und Marktguru. Angaben ohne Gewähr — es gilt der Aushang im Markt.";
 baueChips();
 zeigeProspekt();
+aufraeumen();
 zaehlerSchreiben();
 zeichne();
 </script>
