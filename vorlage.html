@@ -115,6 +115,43 @@ footer{color:var(--grau); font-size:13px; margin-top:40px; border-top:1px solid 
 }
 .weg:active{opacity:.6}
 .listenknoepfe{margin:22px 0 0; display:flex; flex-wrap:wrap; gap:8px}
+.druckknopf{
+  flex:0 0 auto; padding:6px 13px; border-radius:999px;
+  border:1px solid var(--akzent); background:var(--karte); color:var(--akzent);
+  font-size:15px; font-weight:600; cursor:pointer; user-select:none;
+  -webkit-tap-highlight-color:transparent;
+}
+.druckknopf:active{opacity:.6}
+
+/* Zettel zum Ausdrucken
+   Das Blatt liegt im hinteren Fach rechts an. Ein halbes A5-Blatt
+   (105 x 148 mm, quer eingelegt) deckt deshalb die rechte Spalte des
+   A5-Bereichs ab. Der linke Rand von 51 mm schiebt alles dorthin.
+   Im Druckfenster A5 waehlen. */
+#druck{display:none}
+@media print{
+  /* Unten bleiben 72 mm frei: das halbe A5-Blatt ist nur 148 mm lang,
+     der A5-Bereich aber 210 mm. Was darunter stünde, fiele neben das
+     Blatt. Passt die Liste nicht, geht sie auf den nächsten Zettel. */
+  @page{ size: A5 portrait; margin: 8mm 8mm 72mm 51mm; }
+  html,body{ background:#fff !important; color:#000 !important;
+             margin:0; padding:0; max-width:none; font-size:10pt; }
+  header,#ausgabe,#listeausgabe,footer{ display:none !important }
+  #druck{ display:block }
+  #druck .dkopf{ font-size:14pt; font-weight:700; margin:0 }
+  #druck .ddatum{ font-size:8.5pt; color:#333; margin:0 0 4mm }
+  #druck .dmarkt{ font-size:10.5pt; font-weight:700; margin:4mm 0 1.5mm;
+                  padding-bottom:.8mm; border-bottom:1pt solid #000;
+                  break-after:avoid; page-break-after:avoid }
+  #druck .dzeile{ display:flex; gap:2.5mm; align-items:flex-start;
+                  padding:1.3mm 0; border-bottom:.3pt dotted #999;
+                  break-inside:avoid; page-break-inside:avoid }
+  #druck .dkasten{ flex:0 0 auto; width:4mm; height:4mm;
+                   border:.8pt solid #000; margin-top:.7mm }
+  #druck .dname{ flex:1 }
+  #druck .dname small{ display:block; font-size:8pt; color:#444 }
+  #druck .dpreis{ white-space:nowrap; font-weight:700 }
+}
 </style>
 </head>
 <body>
@@ -139,6 +176,7 @@ footer{color:var(--grau); font-size:13px; margin-top:40px; border-top:1px solid 
 </header>
 <div id="ausgabe"></div>
 <div id="listeausgabe" style="display:none"></div>
+<div id="druck"></div>
 <footer id="fuss"></footer>
 
 <script>
@@ -264,10 +302,12 @@ function zeichneListe(){
       + teil.map(punkt).join("") + '</div>';
   });
   html += '<div class="listenknoepfe">'
+       +  '<span class="druckknopf" id="drucken">Drucken</span>'
        +  '<span class="weg" id="wegAbgehakt">Abgehakte entfernen</span>'
        +  '<span class="weg" id="wegAlles">Liste leeren</span>'
        +  '</div>';
   aus.innerHTML = html;
+  document.getElementById("drucken").onclick = drucke;
   document.getElementById("wegAbgehakt").onclick = function(){
     merkliste = merkliste.filter(p=>!p.ab);
     sichereListe(); zaehlerSchreiben(); zeichneListe(); zeichne();
@@ -290,6 +330,35 @@ function punkt(p){
     + '<span class="weg" data-weg="' + esc(p.id) + '">×</span>'
     + '</div>';
 }
+/* ---- Zettel drucken ----
+   Gedruckt werden nur die noch offenen Punkte, nach Märkten geordnet.
+   Die Breite steht im Druckteil des Stylesheets. */
+function drucke(){
+  const offen = merkliste.filter(p=>!p.ab);
+  if(!offen.length) return;
+  const t = new Date();
+  const datum = String(t.getDate()).padStart(2,"0") + "."
+              + String(t.getMonth()+1).padStart(2,"0") + "." + t.getFullYear();
+  const maerkte = [...new Set(offen.map(p=>p.markt))]
+    .sort((a,b)=>{ if(!a) return 1; if(!b) return -1; return a.localeCompare(b,"de"); });
+  let html = '<div class="dkopf">Einkaufsliste</div>'
+           + '<div class="ddatum">' + datum + ' · ' + offen.length + ' Punkte</div>';
+  maerkte.forEach(m=>{
+    html += '<div class="dmarkt">' + (m ? esc(m) : "Ohne Markt") + '</div>';
+    offen.filter(p=>p.markt===m).forEach(p=>{
+      const preis = (typeof p.preis==="number") ? preisTxt(p.preis) : "";
+      html += '<div class="dzeile"><span class="dkasten"></span>'
+        + '<span class="dname">' + esc(p.name)
+        + (p.zusatz ? '<small>' + esc(p.zusatz) + '</small>' : '')
+        + '</span>'
+        + (preis ? '<span class="dpreis">' + preis + '</span>' : '')
+        + '</div>';
+    });
+  });
+  document.getElementById("druck").innerHTML = html;
+  window.print();
+}
+
 document.getElementById("listeausgabe").addEventListener("click", function(e){
   const hak = e.target.closest(".hak");
   if(hak){
